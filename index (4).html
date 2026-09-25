@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>🐍 Snake</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden;touch-action:none}
+#juego{min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{margin:8px 0 2px;font-size:28px}
+#info{font-size:16px;margin-bottom:4px}
+canvas{background:#111;border:2px solid #fff;width:min(92vw,500px);height:min(92vw,500px);image-rendering:pixelated}
+.pantalla{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:16px}
+.pantalla h1{font-size:40px;margin-bottom:8px}.pantalla h2{margin-bottom:20px}
+button{width:min(86vw,350px);padding:14px;margin:6px;border:2px solid #fff;border-radius:12px;background:#222;color:#fff;font-size:18px;font-weight:bold}
+button:active{background:#555;transform:scale(.97)}
+#controles{margin-top:6px;display:flex;gap:18px;justify-content:center;align-items:flex-start}
+.pad{display:flex;flex-direction:column;align-items:center}
+.etiqueta{font-size:13px;font-weight:bold;margin-bottom:3px}
+.grid-control{display:grid;grid-template-columns:52px 52px 52px;grid-template-rows:44px 44px 44px;gap:3px}
+.control{width:52px;height:44px;margin:0;padding:0;font-size:22px}
+.grid-control .control:nth-child(1){grid-column:2;grid-row:1}
+.grid-control .control:nth-child(2){grid-column:1;grid-row:2}
+.grid-control .control:nth-child(3){grid-column:2;grid-row:2}
+.grid-control .control:nth-child(4){grid-column:3;grid-row:2}
+@media (max-width:700px){
+  canvas{width:min(86vw,500px);height:min(86vw,500px)}
+  #controles{gap:8px}
+  .grid-control{grid-template-columns:46px 46px 46px;grid-template-rows:40px 40px 40px}
+  .control{width:46px;height:40px;font-size:20px}
+}
+#gameOver{display:none}.pequeno{font-size:13px;color:#aaa;margin-top:8px}
+</style>
+</head>
+<body>
+<div id="juego">
+<h1>🐍 SNAKE</h1>
+<div id="info">Nivel: <span id="nivelTexto">1</span> &nbsp; 🍎 <span id="puntos">0</span></div>
+<canvas id="canvas"></canvas>
+<div id="controles">
+  <div class="pad">
+    <div class="etiqueta">🟢 JUGADOR 1</div>
+    <div class="grid-control">
+      <button class="control" id="arriba">⬆️</button>
+      <button class="control" id="izquierda">⬅️</button>
+      <button class="control" id="abajo">⬇️</button>
+      <button class="control" id="derecha">➡️</button>
+    </div>
+  </div>
+
+  <div class="pad" id="pad2" style="display:none">
+    <div class="etiqueta">🔵 JUGADOR 2</div>
+    <div class="grid-control">
+      <button class="control" id="w">W</button>
+      <button class="control" id="a">A</button>
+      <button class="control" id="s">S</button>
+      <button class="control" id="d">D</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="pantalla" id="menu">
+<h1>🐍 SNAKE</h1><h2>ELIGE UN MODO</h2>
+<button onclick="abrirNiveles('normal')">🐍 SERPIENTE NORMAL</button>
+<button onclick="abrirNiveles('2jugadores')">👥 2 JUGADORES</button>
+<button onclick="abrirNiveles('laberinto')">🧩 MODO LABERINTO</button>
+<button onclick="abrirNiveles('combinado')">🔀 COMBINAR MODOS</button>
+<div class="pequeno">📱 Versión para pantalla táctil</div>
+</div>
+
+<div class="pantalla" id="niveles" style="display:none">
+<h1>🐍 SNAKE</h1><h2>ELIGE UN NIVEL</h2>
+<button onclick="empezar(1)">🟢 NIVEL 1 - FÁCIL</button>
+<button onclick="empezar(2)">🟡 NIVEL 2 - NORMAL</button>
+<button onclick="empezar(3)">🟠 NIVEL 3 - DIFÍCIL</button>
+<button onclick="volverMenu()">⬅️ VOLVER</button>
+</div>
+
+<div class="pantalla" id="gameOver">
+<h1>💥 GAME OVER</h1><div id="mensajeFinal"></div>
+<button onclick="reiniciar()">🔄 REINTENTAR</button>
+<button onclick="volverMenu()">🏠 MENÚ</button>
+</div>
+
+<script>
+const canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d");
+const TAM=20,COLUMNAS=25,FILAS=25;
+canvas.width=500;canvas.height=500;
+
+let modo="",nivel=1,serpiente1=[],serpiente2=[];
+let direccion1="derecha",direccion2="izquierda";
+let siguienteDireccion1="derecha",siguienteDireccion2="izquierda";
+let puedeGirar1=true,puedeGirar2=true,manzana=null;
+let puntos1=0,puntos2=0,paredes=[],jugando=false,temporizador=null;
+
+function velocidadActual(){return nivel===1?180:nivel===2?130:90}
+function abrirNiveles(tipo){modo=tipo;menu.style.display="none";niveles.style.display="flex"}
+function volverMenu(){
+  jugando=false;
+  if(temporizador)clearTimeout(temporizador);
+  temporizador=null;
+  menu.style.display="flex";
+  niveles.style.display="none";
+  gameOver.style.display="none";
+  document.getElementById("pad2").style.display="none";
+}
+function actualizarControles(){
+  const esDos = (modo==="2jugadores" || modo==="combinado");
+  document.getElementById("pad2").style.display = esDos ? "flex" : "none";
+}
+function empezar(n){
+  nivel=n;
+  nivelTexto.textContent=n;
+  niveles.style.display="none";
+  gameOver.style.display="none";
+  actualizarControles();
+  iniciarPartida();
+}
+
+function iniciarPartida(){
+jugando=true;puntos1=0;puntos2=0;
+serpiente1=[[5,5],[4,5],[3,5]];
+serpiente2=[[19,19],[20,19],[21,19]];
+direccion1="derecha";direccion2="izquierda";
+siguienteDireccion1="derecha";siguienteDireccion2="izquierda";
+puedeGirar1=true;puedeGirar2=true;paredes=[];
+if(modo==="laberinto"||modo==="combinado")crearLaberinto();
+crearManzana();dibujar();mover()
+}
+
+function laberintoNivel1(){paredes=[
+[7,7],[8,7],[9,7],[10,7],[11,7],[11,8],[11,9],[11,10],
+[4,12],[5,12],[6,12],[7,12],[8,12],
+[15,5],[16,5],[17,5],[18,5],[18,6],[18,7],[18,8],
+[13,15],[14,15],[15,15],[16,15],[16,16],[16,17],
+[6,18],[7,18],[8,18],[9,18]]}
+function laberintoNivel2(){paredes=[
+[4,4],[5,4],[6,4],[7,4],[8,4],[8,5],[8,6],[8,7],
+[13,4],[14,4],[15,4],[16,4],[13,5],[13,6],[13,7],
+[4,10],[5,10],[6,10],[7,10],[7,11],[7,12],[7,13],
+[17,10],[18,10],[19,10],[20,10],[17,11],[17,12],[17,13],
+[10,17],[11,17],[12,17],[13,17],[13,18],[13,19],
+[4,20],[5,20],[6,20],[7,20]]}
+function laberintoNivel3(){paredes=[
+[3,3],[4,3],[5,3],[6,3],[6,4],[6,5],[6,6],
+[10,3],[11,3],[12,3],[13,3],[13,4],[13,5],[13,6],
+[18,3],[19,3],[20,3],[18,4],[18,5],[18,6],
+[3,10],[4,10],[5,10],[6,10],[6,11],[6,12],[6,13],
+[11,10],[12,10],[13,10],[14,10],[14,11],[14,12],[14,13],
+[18,10],[19,10],[20,10],[20,11],[20,12],[20,13],
+[4,18],[5,18],[6,18],[7,18],[7,19],[7,20],
+[14,18],[15,18],[16,18],[17,18]]}
+function crearLaberinto(){if(nivel===1)laberintoNivel1();else if(nivel===2)laberintoNivel2();else laberintoNivel3()}
+
+function estaEnPared(x,y){return paredes.some(p=>p[0]===x&&p[1]===y)}
+function estaEnSerpiente(x,y,s){return s.some(p=>p[0]===x&&p[1]===y)}
+function crearManzana(){
+let libres=[];
+for(let y=1;y<FILAS-1;y++)for(let x=1;x<COLUMNAS-1;x++)
+if(!estaEnPared(x,y)&&!estaEnSerpiente(x,y,serpiente1)&&!estaEnSerpiente(x,y,serpiente2))libres.push([x,y]);
+manzana=libres.length?libres[Math.floor(Math.random()*libres.length)]:null
+}
+
+function dibujar(){
+ctx.fillStyle="#111";ctx.fillRect(0,0,500,500);
+for(const p of paredes){ctx.fillStyle="#777";ctx.fillRect(p[0]*TAM,p[1]*TAM,TAM,TAM)}
+if(manzana){ctx.fillStyle="red";ctx.beginPath();ctx.arc(manzana[0]*TAM+10,manzana[1]*TAM+10,7,0,Math.PI*2);ctx.fill()}
+serpiente1.forEach((p,i)=>{ctx.fillStyle=i===0?"lime":"green";ctx.fillRect(p[0]*TAM+1,p[1]*TAM+1,18,18)})
+if(modo==="2jugadores"||modo==="combinado")serpiente2.forEach((p,i)=>{ctx.fillStyle=i===0?"cyan":"blue";ctx.fillRect(p[0]*TAM+1,p[1]*TAM+1,18,18)});
+puntos.textContent=(modo==="2jugadores"||modo==="combinado")?puntos1+" 🟢 / "+puntos2+" 🔵":puntos1
+}
+
+function siguientePosicion1(){let[x,y]=serpiente1[0];if(direccion1==="arriba")y--;if(direccion1==="abajo")y++;if(direccion1==="izquierda")x--;if(direccion1==="derecha")x++;return[x,y]}
+function siguientePosicion2(){let[x,y]=serpiente2[0];if(direccion2==="arriba")y--;if(direccion2==="abajo")y++;if(direccion2==="izquierda")x--;if(direccion2==="derecha")x++;return[x,y]}
+function colision(pos,propia,otra){let[x,y]=pos;return x<0||x>=COLUMNAS||y<0||y>=FILAS||estaEnPared(x,y)||estaEnSerpiente(x,y,propia)||estaEnSerpiente(x,y,otra)}
+
+function mover(){
+if(!jugando)return;
+direccion1=siguienteDireccion1;direccion2=siguienteDireccion2;puedeGirar1=true;puedeGirar2=true;
+let nueva1=siguientePosicion1();
+if(colision(nueva1,serpiente1,serpiente2)){game_over("🐍 ¡HAS PERDIDO!");return}
+let nueva2=null;
+if(modo==="2jugadores"||modo==="combinado"){nueva2=siguientePosicion2();if(colision(nueva2,serpiente2,serpiente1)){game_over("🔵 JUGADOR 2 HA PERDIDO");return}}
+serpiente1.unshift(nueva1);
+let comio1=manzana&&nueva1[0]===manzana[0]&&nueva1[1]===manzana[1];
+if(nueva2){serpiente2.unshift(nueva2)}
+let comio2=nueva2&&manzana&&nueva2[0]===manzana[0]&&nueva2[1]===manzana[1];
+if(comio1){puntos1++;crearManzana()}else serpiente1.pop();
+if(nueva2){if(comio2){puntos2++;crearManzana()}else serpiente2.pop()}
+dibujar();temporizador=setTimeout(mover,velocidadActual())
+}
+
+function cambiarDireccion(dir){
+if(!jugando||!puedeGirar1)return;
+if(dir==="arriba"&&direccion1!=="abajo"){siguienteDireccion1="arriba";puedeGirar1=false}
+else if(dir==="abajo"&&direccion1!=="arriba"){siguienteDireccion1="abajo";puedeGirar1=false}
+else if(dir==="izquierda"&&direccion1!=="derecha"){siguienteDireccion1="izquierda";puedeGirar1=false}
+else if(dir==="derecha"&&direccion1!=="izquierda"){siguienteDireccion1="derecha";puedeGirar1=false}
+}
+["arriba","abajo","izquierda","derecha"].forEach(d=>{
+const b=document.getElementById(d);
+b.addEventListener("touchstart",e=>{e.preventDefault();cambiarDireccion(d)},{passive:false});
+b.addEventListener("click",()=>cambiarDireccion(d));
+});
+function cambiarDireccion2(dir){
+  if(!jugando || !puedeGirar2) return;
+  if(dir==="arriba" && direccion2!=="abajo"){siguienteDireccion2="arriba";puedeGirar2=false}
+  else if(dir==="abajo" && direccion2!=="arriba"){siguienteDireccion2="abajo";puedeGirar2=false}
+  else if(dir==="izquierda" && direccion2!=="derecha"){siguienteDireccion2="izquierda";puedeGirar2=false}
+  else if(dir==="derecha" && direccion2!=="izquierda"){siguienteDireccion2="derecha";puedeGirar2=false}
+}
+const controles2 = {
+  w:"arriba",
+  a:"izquierda",
+  s:"abajo",
+  d:"derecha"
+};
+Object.entries(controles2).forEach(([id,dir])=>{
+  const b=document.getElementById(id);
+  b.addEventListener("touchstart",e=>{e.preventDefault();cambiarDireccion2(dir)},{passive:false});
+  b.addEventListener("click",()=>cambiarDireccion2(dir));
+});
+
+document.addEventListener("keydown",e=>{
+if(e.key==="ArrowUp")cambiarDireccion("arriba");
+if(e.key==="ArrowDown")cambiarDireccion("abajo");
+if(e.key==="ArrowLeft")cambiarDireccion("izquierda");
+if(e.key==="ArrowRight")cambiarDireccion("derecha");
+const k=e.key.toLowerCase();
+if(k==="w")cambiarDireccion2("arriba");
+if(k==="s")cambiarDireccion2("abajo");
+if(k==="a")cambiarDireccion2("izquierda");
+if(k==="d")cambiarDireccion2("derecha");
+});
+function game_over(mensaje){jugando=false;if(temporizador)clearTimeout(temporizador);temporizador=null;mensajeFinal.innerHTML=mensaje+"<br><br>🍎 Puntos: "+puntos1;gameOver.style.display="flex"}
+function reiniciar(){gameOver.style.display="none";iniciarPartida()}
+</script>
+</body>
+</html>
